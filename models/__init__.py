@@ -16,6 +16,7 @@ from .supervised import (
     LVQ1,
     MARSRegressor,
 )
+from .unsupervised import AgglomerativeClustering, KMeans
 
 __all__ = [
     "BaseModel",
@@ -30,4 +31,6 @@ __all__ = [
     "KNeighborsModel",
     "LVQ1",
     "DANN",
+    "KMeans",
+    "AgglomerativeClustering",
 ]
