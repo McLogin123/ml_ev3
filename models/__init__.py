@@ -6,10 +6,28 @@ from .base import (
     BaseUnsupervisedModel,
     ModelNotFittedError,
 )
+from .supervised import (
+    BaggingClassifier,
+    DANN,
+    DecisionTree,
+    KNeighborsModel,
+    LinearRegression,
+    LogisticRegression,
+    LVQ1,
+    MARSRegressor,
+)
 
 __all__ = [
     "BaseModel",
     "BaseSupervisedModel",
     "BaseUnsupervisedModel",
     "ModelNotFittedError",
+    "LinearRegression",
+    "LogisticRegression",
+    "DecisionTree",
+    "BaggingClassifier",
+    "MARSRegressor",
+    "KNeighborsModel",
+    "LVQ1",
+    "DANN",
 ]
