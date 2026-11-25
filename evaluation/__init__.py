@@ -18,6 +18,7 @@ from .metrics import (
     rmse,
     silhouette_score,
 )
+from .validation import KFold, StratifiedKFold, cross_validate, grid_search
 from .visualizer import Visualizer
 
 __all__ = [
@@ -37,5 +38,9 @@ __all__ = [
     "regression_report",
     "rmse",
     "silhouette_score",
+    "KFold",
+    "StratifiedKFold",
+    "cross_validate",
+    "grid_search",
     "Visualizer",
 ]

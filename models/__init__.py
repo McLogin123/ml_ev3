@@ -14,6 +14,7 @@ from .supervised import (
     LinearRegression,
     LogisticRegression,
     LVQ1,
+    GAMRegressor,
     MARSRegressor,
 )
 from .unsupervised import AgglomerativeClustering, KMeans
@@ -28,6 +29,7 @@ __all__ = [
     "DecisionTree",
     "BaggingClassifier",
     "MARSRegressor",
+    "GAMRegressor",
     "KNeighborsModel",
     "LVQ1",
     "DANN",

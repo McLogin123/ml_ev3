@@ -63,6 +63,8 @@ class KMeans(BaseUnsupervisedModel):
     su propio centro asignado. Así el algoritmo no produce centros NaN
     """
 
+    requires_scaling = True
+
     def __init__(self, n_clusters, max_iter=100, tol=1e-4, n_init=10, random_state=None):
         super().__init__()
         if n_clusters < 1:

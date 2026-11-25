@@ -44,7 +44,11 @@ def _sample_report():
             "pearson": {
                 "age": {"age": 1.0, "income": 0.8},
                 "income": {"age": 0.8, "income": 1.0},
-            }
+            },
+            "spearman": {
+                "age": {"age": 1.0, "income": 0.9},
+                "income": {"age": 0.9, "income": 1.0},
+            },
         },
         "target": {
             "type": "classification",
@@ -94,6 +98,15 @@ def test_plot_correlation_heatmap_creates_png(visualizer):
     path = visualizer.plot_correlation_heatmap(_sample_report())
 
     # Verificar
+    _assert_png(path)
+
+
+def test_plot_spearman_heatmap_creates_png(visualizer):
+    # Ejecutar
+    path = visualizer.plot_spearman_heatmap(_sample_report())
+
+    # Verificar
+    assert path == Path("reports/figures/spearman_heatmap.png")
     _assert_png(path)
 
 
@@ -188,6 +201,19 @@ def test_plot_dendrogram_creates_png(visualizer):
 
     # Ejecutar
     path = visualizer.plot_dendrogram(linkage, ["a", "b", "c"])
+
+    # Verificar
+    _assert_png(path)
+
+
+def test_plot_dendrogram_with_partial_linkage(visualizer):
+    # Preparar: 5 muestras y solo 3 fusiones porque el modelo se detuvo en 2 clusters.
+    linkage = np.array(
+        [[0.0, 1.0, 1.0, 2.0], [2.0, 3.0, 2.0, 2.0], [5.0, 6.0, 4.0, 4.0]]
+    )
+
+    # Ejecutar
+    path = visualizer.plot_dendrogram(linkage, list("abcde"))
 
     # Verificar
     _assert_png(path)
@@ -335,6 +361,32 @@ def test_plot_inertia_curve_annotates_values(visualizer):
 
     # Verificar
     _assert_png(path)
+
+
+def test_plot_inertia_curve_marks_elbow(visualizer):
+    # Ejecutar
+    path = visualizer.plot_inertia_curve(
+        [2, 3, 4], [10.0, 4.5, 3.0], elbow_k=3
+    )
+
+    # Verificar
+    _assert_png(path)
+
+
+def test_plot_clusters_accepts_axis_labels_for_pca(visualizer):
+    # Preparar
+    X = np.array([[0.0, 0.0], [1.0, 1.0], [5.0, 5.0], [6.0, 6.0]])
+    labels = np.array([0, 0, 1, 1])
+    centers = np.array([[0.5, 0.5], [5.5, 5.5]])
+
+    # Ejecutar
+    path = visualizer.plot_clusters(
+        X, labels, centers, filename="pca.png", xlabel="PC1", ylabel="PC2"
+    )
+
+    # Verificar
+    _assert_png(path)
+    assert path.name == "pca.png"
 
 
 def test_plot_silhouette_sorted_by_cluster(visualizer):

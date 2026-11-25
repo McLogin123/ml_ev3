@@ -45,6 +45,8 @@ class AgglomerativeClustering(BaseUnsupervisedModel):
     explícita y no recomputa la jerarquía
     """
 
+    requires_scaling = True
+
     def __init__(self, n_clusters=2, linkage="complete"):
         super().__init__()
         if n_clusters < 1:

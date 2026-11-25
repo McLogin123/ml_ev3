@@ -12,6 +12,13 @@ from core.schema import TaskType
 from models.base import BaseSupervisedModel
 
 
+def _hinge(values, knot, sign):
+    """Devuelve max(0, x-k) si sign=1 o max(0, k-x) si sign=-1"""
+    if sign == 1:
+        return np.maximum(0.0, values - knot)
+    return np.maximum(0.0, knot - values)
+
+
 class MARSRegressor(BaseSupervisedModel):
     """Regresión aditiva con bases de bisagra elegidas por búsqueda forward
 
@@ -79,7 +86,7 @@ class MARSRegressor(BaseSupervisedModel):
                     if candidate in self.used_knots_:
                         continue
 
-                    column = self._hinge(values, knot, sign)
+                    column = _hinge(values, knot, sign)
                     mask = column > 0
                     if (
                         np.count_nonzero(mask) < self.min_samples_leaf
@@ -99,24 +106,73 @@ class MARSRegressor(BaseSupervisedModel):
                         best_candidate = candidate
         return best_candidate, best_rss
 
-    @staticmethod
-    def _hinge(values, knot, sign):
-        """Devuelve max(0, x-k) si sign=1 o max(0, k-x) si sign=-1"""
-        if sign == 1:
-            return np.maximum(0.0, values - knot)
-        return np.maximum(0.0, knot - values)
-
     def _evaluate_basis(self, X):
         """Construye la matriz de diseño: constante más bases seleccionadas"""
         columns = [np.ones(len(X))]
         for feature_index, knot, sign in self.basis_:
-            columns.append(
-                self._hinge(X[:, feature_index], knot, sign).reshape(-1, 1)
-            )
+            columns.append(_hinge(X[:, feature_index], knot, sign).reshape(-1, 1))
         return np.column_stack(columns)
 
     def predict(self, X):
         """Devuelve la suma de las bases activas ponderadas"""
+        self._check_is_fitted()
+        matrix = np.asarray(X, dtype=float)
+        if matrix.ndim != 2 or matrix.shape[1] != self.n_features_in_:
+            raise ValueError("X debe tener la misma forma que en fit().")
+        return self._evaluate_basis(matrix) @ self.coefficients_
+
+
+class GAMRegressor(BaseSupervisedModel):
+    """Modelo aditivo generalizado con bases de bisagra en cuantiles fijos
+
+    Parametros:
+        n_knots : int, default=5
+            Nodos por feature, repartidos entre los cuantiles 1/(n_knots+1)...n/(n_knots+1)
+
+    Notes
+    -----
+    Es un GAM aditivo: la predicción es una constante más una suma de funciones
+    de una sola feature. A diferencia de MARS, los nodos no se buscan con una
+    pasada forward: se fijan con cuantiles de train y solo se ajustan los
+    coeficientes por mínimos cuadrados
+    """
+
+    def __init__(self, n_knots=5):
+        super().__init__(TaskType.REGRESSION)
+        if n_knots < 1:
+            raise ValueError("n_knots debe ser al menos 1.")
+        self.n_knots = n_knots
+
+    def fit(self, X, y):
+        """Fija los nodos con cuantiles de train y ajusta los coeficientes"""
+        matrix = np.asarray(X, dtype=float)
+        labels = np.asarray(y, dtype=float)
+        if matrix.ndim != 2:
+            raise ValueError("X debe ser una matriz bidimensional.")
+        if labels.ndim != 1 or len(labels) != len(matrix):
+            raise ValueError("y debe ser unidimensional y tener la longitud de X.")
+
+        self.n_features_in_ = matrix.shape[1]
+        quantiles = np.linspace(0.0, 1.0, self.n_knots + 2)[1:-1]
+        self.basis_ = []
+        for feature_index in range(self.n_features_in_):
+            for knot in np.quantile(matrix[:, feature_index], quantiles):
+                self.basis_.append((feature_index, float(knot), 1))
+        self.coefficients_ = np.linalg.lstsq(
+            self._evaluate_basis(matrix), labels, rcond=None
+        )[0]
+        self.is_fitted = True
+        return self
+
+    def _evaluate_basis(self, X):
+        """Construye la matriz de diseño: constante más todas las bisagras"""
+        columns = [np.ones(len(X))]
+        for feature_index, knot, sign in self.basis_:
+            columns.append(_hinge(X[:, feature_index], knot, sign).reshape(-1, 1))
+        return np.column_stack(columns)
+
+    def predict(self, X):
+        """Devuelve la suma de las contribuciones aditivas de cada feature"""
         self._check_is_fitted()
         matrix = np.asarray(X, dtype=float)
         if matrix.ndim != 2 or matrix.shape[1] != self.n_features_in_:

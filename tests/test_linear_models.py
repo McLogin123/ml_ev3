@@ -70,6 +70,12 @@ def test_logistic_regression_rejects_non_binary_labels():
         LogisticRegression().fit(X, y)
 
 
+def test_requires_scaling_por_modelo_lineal():
+    # Preparar / Ejecutar / Verificar
+    assert LinearRegression().requires_scaling is False
+    assert LogisticRegression().requires_scaling is True
+
+
 def test_predict_before_fit_raises():
     # Preparar
     model = LinearRegression()

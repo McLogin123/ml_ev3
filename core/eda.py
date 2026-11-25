@@ -6,13 +6,14 @@ Este módulo solo describe los datos: no imputa, no escala y no elimina nada.
 import json
 import pandas as pd
 from pathlib import Path
-from .schema import TaskType
+from .schema import Dataset, TaskType
 
 # Umbrales usados para generar avisos. Están juntos para poder ajustarlos.
 _MAX_CATEGORIAS = 50
-_MAX_CORRELACION = 0.90
+_MAX_CORRELACION = 0.85
 _MAX_DESEQUILIBRIO = 3.0
 _AVISO_FALTANTES = 50.0
+_MIN_VARIANCE = 1e-12
 
 
 def _number(value, digits: int = 4):
@@ -59,6 +60,7 @@ def _numeric_stats(series):
         "count": int(clean.count()),
         "mean": _number(clean.mean()),
         "std": _number(clean.std()),
+        "variance": _number(clean.var()),
         "min": _number(clean.min()),
         "q1": _number(clean.quantile(0.25)),
         "median": _number(clean.median()),
@@ -66,6 +68,16 @@ def _numeric_stats(series):
         "max": _number(clean.max()),
         "skew": _number(clean.skew()),
     }
+
+
+def _matrix_to_dict(matrix, numeric):
+    """Convierte una matriz cuadrada de pandas en diccionarios JSON"""
+    result = {}
+    for row in numeric:
+        result[str(row)] = {
+            str(column): _number(matrix.loc[row, column]) for column in numeric
+        }
+    return result
 
 
 class EDAnalyzer:
@@ -82,6 +94,13 @@ class EDAnalyzer:
     """
 
     def __init__(self, dataset):
+        if isinstance(dataset, pd.DataFrame):
+            dataset = Dataset(
+                frame=dataset,
+                target=None,
+                task=TaskType.UNSUPERVISED,
+                source=Path("dataframe"),
+            )
         self.dataset = dataset
         self.report = None
 
@@ -90,19 +109,21 @@ class EDAnalyzer:
 
         Retorna:
             dict
-                Bloques general, missing, numeric, categorical,
-                outliers, correlations, target y warnings
+                Bloques general, missing, numeric, categorical, outliers,
+                correlations, low_variance, target y warnings
         """
         frame = self.dataset.frame
         numeric = _numeric_columns(frame)
+        numeric_stats = self._numeric(frame, numeric)
 
         report = {
             "general": self._general(frame),
             "missing": self._missing(frame),
-            "numeric": self._numeric(frame, numeric),
+            "numeric": numeric_stats,
             "categorical": self._categorical(frame, numeric),
             "outliers": self._outliers(frame, numeric),
             "correlations": self._correlations(frame, numeric),
+            "low_variance": self._low_variance(numeric_stats),
             "target": self._target(frame, numeric),
         }
         report["warnings"] = self._warnings(frame, report)
@@ -178,6 +199,15 @@ class EDAnalyzer:
             result[str(name)] = _numeric_stats(frame[name])
         return result
 
+    def _low_variance(self, stats) -> list:
+        """Nombres de columnas numéricas con varianza nula o casi nula"""
+        return [
+            name
+            for name, values in stats.items()
+            if values.get("variance") is not None
+            and abs(values["variance"]) <= _MIN_VARIANCE
+        ]
+
     def _categorical(self, frame, numeric) -> dict:
         """Cardinalidad y valor más frecuente de las columnas no numéricas"""
         result = {}
@@ -238,28 +268,31 @@ class EDAnalyzer:
         return result
 
     def _correlations(self, frame, numeric) -> dict:
-        """Correlación de Pearson entre columnas numéricas.
+        """Matrices de covarianza, Pearson y Spearman, y pares redundantes
 
-        También devuelve los pares con |r| >= 0.90, que suelen aportar
-        información redundante y son candidatos a eliminar en el preprocesado
+        Pearson y covarianza usan los valores tal cual; Spearman usa rangos y
+        detecta relaciones monótonas no lineales.
+        Los pares con |r| > 0.85 se reportan como candidatos a revisar en el preprocesado
         """
         if len(numeric) < 2:
-            return {"pearson": {}, "strong_pairs": []}
+            return {
+                "pearson": {},
+                "spearman": {},
+                "covariance": {},
+                "strong_pairs": [],
+            }
 
-        matrix = frame[numeric].corr()
-        pearson = {}
-        for row in numeric:
-            pearson[str(row)] = {}
-            for column in numeric:
-                pearson[str(row)][str(column)] = _number(matrix.loc[row, column])
+        pearson_matrix = frame[numeric].corr()
+        spearman_matrix = frame[numeric].corr(method="spearman")
+        covariance_matrix = frame[numeric].cov()
 
         strong_pairs = []
         for i in range(len(numeric)):
             for j in range(i + 1, len(numeric)):
-                value = matrix.loc[numeric[i], numeric[j]]
+                value = pearson_matrix.loc[numeric[i], numeric[j]]
                 if pd.isna(value):
                     continue
-                if abs(value) >= _MAX_CORRELACION:
+                if abs(value) > _MAX_CORRELACION:
                     strong_pairs.append(
                         {
                             "feature_a": str(numeric[i]),
@@ -268,7 +301,12 @@ class EDAnalyzer:
                         }
                     )
 
-        return {"pearson": pearson, "strong_pairs": strong_pairs}
+        return {
+            "pearson": _matrix_to_dict(pearson_matrix, numeric),
+            "spearman": _matrix_to_dict(spearman_matrix, numeric),
+            "covariance": _matrix_to_dict(covariance_matrix, numeric),
+            "strong_pairs": strong_pairs,
+        }
 
     def _target(self, frame, numeric):
         """Analiza la columna objetivo según la tarea, o None si no hay"""
@@ -345,6 +383,14 @@ class EDAnalyzer:
                     f"La columna '{name}' tiene {missing['pct']}% de valores "
                     "faltantes; imputar puede introducir mucho ruido."
                 )
+
+        for name in report["low_variance"]:
+            if frame[name].dropna().nunique() <= 1:
+                continue
+            warnings.append(
+                f"La columna '{name}' tiene varianza nula o casi nula: "
+                "no aporta información."
+            )
 
         for name, info in report["categorical"].items():
             if info["n_unique"] > _MAX_CATEGORIAS:

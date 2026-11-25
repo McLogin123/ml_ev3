@@ -15,7 +15,15 @@ class ModelNotFittedError(Exception):
 
 
 class BaseModel(ABC):
-    """Contrato mínimo compartido por todos los modelos"""
+    """Contrato mínimo compartido por todos los modelos
+
+    Atributos:
+        requires_scaling : bool
+            False por defecto; los modelos sensibles a la escala lo cambian
+            a True y el pipeline decide el escalado con este valor
+    """
+
+    requires_scaling = False
 
     def __init__(self):
         self.is_fitted = False

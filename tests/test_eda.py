@@ -112,8 +112,63 @@ def test_correlacion_y_aviso_de_redundancia():
 
     # Verificar
     assert report["correlations"]["pearson"]["x"]["y"] == 1.0
+    assert report["correlations"]["spearman"]["x"]["y"] == 1.0
+    assert report["correlations"]["covariance"]["x"]["x"] == 1.6667
     assert len(report["correlations"]["strong_pairs"]) == 1
     assert any("correlacionadas" in text for text in report["warnings"])
+
+
+def test_spearman_detecta_relacion_monotona_no_lineal():
+    # Preparar: y = x^3; Spearman es 1 pero Pearson no llega a 1.
+    frame = pd.DataFrame({"x": [1, 2, 3, 4], "y": [1, 8, 27, 64]})
+
+    # Ejecutar
+    report = EDAnalyzer(_dataset(frame)).run()
+
+    # Verificar
+    correlations = report["correlations"]
+    assert correlations["spearman"]["x"]["y"] == 1.0
+    assert correlations["pearson"]["x"]["y"] < 1.0
+    assert "covariance" in correlations
+
+
+def test_umbral_de_multicolinealidad_es_085():
+    # Preparar: r ≈ 0.8789, antes se descartaba con el umbral de 0.90.
+    x = list(range(20))
+    y = [value + (-1) ** value * 3 for value in x]
+    frame = pd.DataFrame({"x": x, "y": y})
+
+    # Ejecutar
+    report = EDAnalyzer(_dataset(frame)).run()
+
+    # Verificar
+    value = report["correlations"]["pearson"]["x"]["y"]
+    assert 0.85 < value < 0.90
+    assert len(report["correlations"]["strong_pairs"]) == 1
+
+
+def test_detecta_varianza_casi_nula():
+    # Preparar: valores distintos en la décima milésima, redondean a varianza 0.
+    frame = pd.DataFrame({"x": [1.0, 1.0 + 1e-13, 1.0], "feature": [1, 2, 3]})
+
+    # Ejecutar
+    report = EDAnalyzer(_dataset(frame)).run()
+
+    # Verificar
+    assert "x" in report["low_variance"]
+    assert any("varianza nula" in text for text in report["warnings"])
+
+
+def test_acepta_dataframe_directo():
+    # Preparar
+    frame = pd.DataFrame({"x": [1, 2, 3]})
+
+    # Ejecutar
+    report = EDAnalyzer(frame).run()
+
+    # Verificar
+    assert report["general"]["n_rows"] == 3
+    assert report["target"] is None
 
 
 def test_target_de_clasificacion_y_desequilibrio():

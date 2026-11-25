@@ -89,8 +89,10 @@ class LogisticRegression(BaseSupervisedModel):
     Notes
     -----
     Las etiquetas deben estar codificadas como 0 y 1. Conviene que las features estén
-    escaladas; el preprocesador ya lo hace por defecto
+    escaladas; el pipeline lo decide con requires_scaling
     """
+
+    requires_scaling = True
 
     def __init__(self, learning_rate=0.1, n_iterations=1000, fit_intercept=True):
         super().__init__(TaskType.CLASSIFICATION)

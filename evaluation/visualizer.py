@@ -72,27 +72,35 @@ class Visualizer:
         return self._save(figure, filename)
 
     def plot_correlation_heatmap(self, eda_report, filename="correlation_heatmap.png"):
-        """Mapa de calor de la matriz de correlación de Pearson"""
-        pearson = eda_report["correlations"]["pearson"]
-        names = list(pearson.keys())
+        """Mapa de calor anotado de la correlación de Pearson"""
+        return self._plot_matrix_heatmap(
+            eda_report["correlations"]["pearson"], "Correlación de Pearson", filename
+        )
+
+    def plot_spearman_heatmap(self, eda_report, filename="spearman_heatmap.png"):
+        """Mapa de calor anotado de la correlación de Spearman"""
+        return self._plot_matrix_heatmap(
+            eda_report["correlations"]["spearman"], "Correlación de Spearman", filename
+        )
+
+    def _plot_matrix_heatmap(self, values, title, filename):
+        """Dibuja una matriz cuadrada con sus valores escritos en cada celda"""
+        names = list(values.keys())
         figure, axis = plt.subplots()
 
         if len(names) < 2:
             self._empty_axis(axis, "Se necesitan al menos dos columnas numéricas")
-            axis.set_title("Correlaciones")
+            axis.set_title(title)
             return self._save(figure, filename)
 
         matrix = np.array(
-            [
-                [pearson[row][column] for column in names]
-                for row in names
-            ],
+            [[values[row][column] for column in names] for row in names],
             dtype=float,
         )
         image = axis.imshow(matrix, cmap="coolwarm", vmin=-1, vmax=1)
         axis.set_xticks(range(len(names)), names, rotation=45, ha="right")
         axis.set_yticks(range(len(names)), names)
-        axis.set_title("Correlación de Pearson")
+        axis.set_title(title)
 
         for row in range(len(names)):
             for column in range(len(names)):
@@ -173,7 +181,10 @@ class Visualizer:
         figure.colorbar(image, ax=axis)
         return self._save(figure, filename)
 
-    def plot_clusters(self, X, labels, centers=None, filename="clusters.png"):
+    def plot_clusters(
+        self, X, labels, centers=None, filename="clusters.png",
+        xlabel="Feature 1", ylabel="Feature 2",
+    ):
         """Dispersión de clusters usando las dos primeras columnas de X"""
         points = np.asarray(X, dtype=float)
         assigned = np.asarray(labels)
@@ -203,8 +214,8 @@ class Visualizer:
             )
             axis.legend()
 
-        axis.set_xlabel("Feature 1")
-        axis.set_ylabel("Feature 2")
+        axis.set_xlabel(xlabel)
+        axis.set_ylabel(ylabel)
         axis.set_title(f"Clusters{note}")
         return self._save(figure, filename)
 
@@ -215,10 +226,14 @@ class Visualizer:
             merges = np.empty((0, 4), dtype=float)
         if merges.ndim != 2 or merges.shape[1] != 4:
             raise ValueError("La matriz de enlace debe tener forma (m, 4).")
-        if labels is not None and len(labels) != len(merges) + 1:
-            raise ValueError("labels debe tener una entrada por muestra original.")
-
-        n_samples = len(merges) + 1
+        # El modelo se detiene en n_clusters: puede haber menos fusiones que
+        # muestras-1, así que el número de muestras no se deduce del número de filas.
+        if labels is not None:
+            n_samples = len(labels)
+        elif len(merges):
+            n_samples = int(np.max(merges[:, :2])) + 1
+        else:
+            n_samples = 1
         x_positions = {index: float(index) for index in range(n_samples)}
         y_positions = {index: 0.0 for index in range(n_samples)}
 
@@ -466,8 +481,10 @@ class Visualizer:
         axis.set_title("Métricas de regresión")
         return self._save(figure, filename)
 
-    def plot_inertia_curve(self, k_values, inertias, filename="inertia_curve.png"):
-        """Curva de inercia con valores anotados para el método del codo"""
+    def plot_inertia_curve(
+        self, k_values, inertias, elbow_k=None, filename="inertia_curve.png"
+    ):
+        """Curva de inercia con valores anotados y codo opcional marcado"""
         k = np.asarray(k_values, dtype=float)
         inertia = np.asarray(inertias, dtype=float)
         if k.ndim != 1 or inertia.ndim != 1 or len(k) != len(inertia):
@@ -475,6 +492,15 @@ class Visualizer:
 
         figure, axis = plt.subplots()
         axis.plot(k, inertia, marker="o", color="#4C72B0")
+        if elbow_k is not None:
+            axis.axvline(
+                elbow_k,
+                color="red",
+                linestyle="--",
+                linewidth=1.5,
+                label=f"Codo k={elbow_k}",
+            )
+            axis.legend()
         for x, y in zip(k, inertia):
             axis.annotate(
                 f"{y:.2f}",

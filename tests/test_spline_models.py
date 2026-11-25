@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from models.base import ModelNotFittedError
-from models.supervised.spline_models import MARSRegressor
+from models.supervised.spline_models import GAMRegressor, MARSRegressor
 
 
 def test_mars_represents_absolute_value():
@@ -45,6 +45,27 @@ def test_mars_approximates_smooth_curve():
     # Verificar
     assert model.score(X, y) > 0.95
     assert len(model.basis_) > 0
+
+
+def test_gam_approximates_additive_function():
+    # Preparar: la salida es suma de una curva en x0 y una recta en x1
+    x0 = np.linspace(0.0, 5.0, 40)
+    x1 = np.linspace(-2.0, 2.0, 40)
+    X = np.column_stack([x0, x1])
+    y = np.sin(x0) + 2.0 * x1
+
+    # Ejecutar
+    model = GAMRegressor(n_knots=6).fit(X, y)
+
+    # Verificar
+    assert model.score(X, y) > 0.95
+    assert len(model.basis_) == 12
+
+
+def test_gam_rejects_invalid_n_knots():
+    # Ejecutar / Verificar
+    with pytest.raises(ValueError, match="n_knots"):
+        GAMRegressor(n_knots=0)
 
 
 def test_mars_rejects_invalid_max_terms():

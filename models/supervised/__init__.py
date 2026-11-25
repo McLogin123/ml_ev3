@@ -2,7 +2,7 @@
 
 from .linear_models import LinearRegression, LogisticRegression
 from .tree_models import BaggingClassifier, DecisionTree
-from .spline_models import MARSRegressor
+from .spline_models import GAMRegressor, MARSRegressor
 from .prototype_models import DANN, KNeighborsModel, LVQ1
 
 __all__ = [
@@ -11,6 +11,7 @@ __all__ = [
     "DecisionTree",
     "BaggingClassifier",
     "MARSRegressor",
+    "GAMRegressor",
     "KNeighborsModel",
     "LVQ1",
     "DANN",

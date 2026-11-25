@@ -42,6 +42,11 @@ class DecisionTree(BaseSupervisedModel):
         max_features : int or None, default=None
             Número de features candidatas por división. None usa todas
 
+    Atributos:
+        feature_importances_ : numpy.ndarray
+            Importancia de cada feature: suma de las reducciones de impureza
+            ponderadas por el tamaño del nodo, normalizada para sumar 1
+
     Notes
     -----
     Selecciona el mejor umbral entre puntos medios de valores consecutivos de cada feature
@@ -72,8 +77,14 @@ class DecisionTree(BaseSupervisedModel):
             raise ValueError("y debe ser unidimensional y tener la longitud de X.")
 
         self.n_features_in_ = matrix.shape[1]
+        self.n_samples_ = len(matrix)
+        self._importance = np.zeros(self.n_features_in_, dtype=float)
         self.classes_ = np.unique(labels) if self.task == TaskType.CLASSIFICATION else None
         self.root_ = self._build_tree(matrix, labels, depth=0)
+        total = self._importance.sum()
+        self.feature_importances_ = (
+            self._importance / total if total > 0 else np.zeros(self.n_features_in_)
+        )
         self.is_fitted = True
         return self
 
@@ -90,14 +101,15 @@ class DecisionTree(BaseSupervisedModel):
         if best is None:
             return _LeafNode(prediction)
 
-        feature_index, threshold = best
+        feature_index, threshold, gain = best
+        self._importance[feature_index] += gain * len(y) / self.n_samples_
         mask = X[:, feature_index] <= threshold
         left = self._build_tree(X[mask], y[mask], depth + 1)
         right = self._build_tree(X[~mask], y[~mask], depth + 1)
         return _TreeNode(feature_index, threshold, left, right)
 
     def _best_split(self, X, y):
-        """Devuelve (feature, threshold) con menor impureza o None"""
+        """Devuelve (feature, threshold, ganancia) con menor impureza o None"""
         candidate_features = range(self.n_features_in_)
         if self.max_features is not None:
             if self.max_features < 1:
@@ -134,6 +146,8 @@ class DecisionTree(BaseSupervisedModel):
                 if gain > best_gain:
                     best_gain = gain
                     best_split = (feature_index, float(threshold))
+        if best_split is not None:
+            best_split = (best_split[0], best_split[1], float(best_gain))
         return best_split
 
     def _impurity(self, y):
@@ -229,6 +243,9 @@ class BaggingClassifier(BaseSupervisedModel):
             tree.fit(matrix[indices], labels[indices])
             self.estimators_.append(tree)
 
+        self.feature_importances_ = np.mean(
+            [tree.feature_importances_ for tree in self.estimators_], axis=0
+        )
         self.is_fitted = True
         return self
 
